@@ -16,7 +16,7 @@ on:
         type: string
         default: ""
       release:
-        description: Publish the binaries to the GitHub release named after the version
+        description: Publish the binaries to the GitHub release <version>-<feature hash>
         type: boolean
         default: false
 
@@ -31,6 +31,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       archs: ${{ steps.archs.outputs.archs }}
       build_tags: ${{ steps.features.outputs.build_tags }}
+      release_name: ${{ steps.features.outputs.release_name }}
 
     steps:
     - name: Checkout tailscale-custom
@@ -74,9 +75,15 @@ jobs:
       id: features
       env:
         FEATURES: ${{ inputs.features }}
+        VERSION: ${{ steps.version.outputs.version }}
       run: |
         tailscale-custom/scripts/resolve-features.sh tailscale "$FEATURES" features
-        echo "build_tags=$(cat features/build-tags.txt)" >> "$GITHUB_OUTPUT"
+        release_name="$VERSION-$(cat features/feature-hash.txt)"
+        echo "Release name: $release_name"
+        {
+          echo "build_tags=$(cat features/build-tags.txt)"
+          echo "release_name=$release_name"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Upload feature lists
       uses: actions/upload-artifact@v7
@@ -133,7 +140,7 @@ jobs:
     permissions:
       contents: write
     concurrency:
-      group: release-${{ needs.prepare.outputs.version }}
+      group: release-${{ needs.prepare.outputs.release_name }}
       cancel-in-progress: false
 
     steps:
@@ -152,5 +159,6 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
         GH_REPO: ${{ github.repository }}
+        RELEASE_NAME: ${{ needs.prepare.outputs.release_name }}
         VERSION: ${{ needs.prepare.outputs.version }}
-      run: tailscale-custom/scripts/release.sh "$VERSION" dist
+      run: tailscale-custom/scripts/release.sh "$RELEASE_NAME" "$VERSION" dist
