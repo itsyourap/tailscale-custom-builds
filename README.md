@@ -21,8 +21,9 @@ The `features` default lists the features of Tailscale v1.104.2. Features added
 in later versions are compiled out unless you add them to the list. Run
 `go run ./cmd/featuretags --list` in the Tailscale source to see them.
 
-Each build produces `tailscale-custom-linux-<arch>`. With `release` off, the
-binaries and the feature lists are kept as workflow artifacts for 7 days.
+Each build produces `tailscale-<version>-<feature hash>-<arch>`, for example
+`tailscale-v1.104.2-bac268ed04d5-mipsle`. With `release` off, the binaries and
+the feature lists are kept as workflow artifacts for 7 days.
 
 ### Releases
 
@@ -30,18 +31,20 @@ With `release` on, the binaries go to the release named
 `<version>-<feature hash>`, for example `v1.104.2-bac268ed04d5` for every
 feature of v1.104.2. Each feature set of a version gets its own release.
 
-- If there is no such release, it is created with every binary,
-  `enabled-features.txt` and `disabled-features.txt`.
+- If there is no such release, it is created with every binary. Its
+  description lists the enabled and disabled features and the text the feature
+  hash was computed from.
 - If the release exists, only binaries for architectures it doesn't have yet
   are uploaded. If it already has all of them, nothing changes.
 
 The feature hash covers the features actually in the binary, including the
 ones added as dependencies, so inputs that produce the same binary share a
 release. The names are sorted in byte order, joined with commas, hashed with
-SHA-256 and cut to 12 hex digits. To check a release's hash:
+SHA-256 and cut to 12 hex digits. To check a release's hash, take the text
+from its description:
 
 ```sh
-LC_ALL=C sort enabled-features.txt | paste -sd, | tr -d '\n' | sha256sum | cut -c1-12
+printf '%s' 'advertiseroutes,c2n,cli,dns,netstack' | sha256sum | cut -c1-12
 ```
 
 ## Architectures
@@ -64,10 +67,10 @@ The binary is `tailscaled`. If the `cli` feature is enabled, invoking it under
 the name `tailscale` (through a symlink) runs the CLI:
 
 ```sh
-chmod +x tailscale-custom-linux-<arch>
-ln -s tailscale-custom-linux-<arch> tailscale
+chmod +x tailscale-<version>-<hash>-<arch>
+ln -s tailscale-<version>-<hash>-<arch> tailscale
 
-./tailscale-custom-linux-<arch> --statedir=/path/to/persistent/tailscale &
+./tailscale-<version>-<hash>-<arch> --statedir=/path/to/persistent/tailscale &
 ./tailscale up
 ```
 
@@ -85,7 +88,8 @@ docker run --rm -v "$PWD:/work" -w /work -e OWNER="$(id -u):$(id -g)" ubuntu:24.
   apt-get install -y -qq git curl ca-certificates >/dev/null
   git clone --branch v1.104.2 https://github.com/tailscale/tailscale /tmp/tailscale
   scripts/resolve-features.sh /tmp/tailscale "cli,netstack,dns,advertiseroutes" dist
-  scripts/build.sh /tmp/tailscale mipsle "$(cat dist/build-tags.txt)" dist
+  scripts/build.sh /tmp/tailscale mipsle "$(cat dist/build-tags.txt)" \
+    "tailscale-v1.104.2-$(cat dist/feature-hash.txt)" dist
   chown -R "$OWNER" dist'
 ```
 
@@ -93,7 +97,7 @@ The scripts:
 
 - `scripts/resolve-features.sh` validates the feature list, adds
   dependencies, and writes `enabled-features.txt`, `disabled-features.txt`,
-  `build-tags.txt` and `feature-hash.txt`.
+  `build-tags.txt`, `feature-hash-input.txt` and `feature-hash.txt`.
 - `scripts/build.sh` builds one architecture with Tailscale's Go fork, pinned
   by the source tree's `go.toolchain.rev`, as official releases do.
 - `scripts/resolve-archs.sh` validates the architecture list for the build
