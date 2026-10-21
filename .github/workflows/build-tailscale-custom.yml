@@ -118,17 +118,18 @@ jobs:
         path: tailscale
         fetch-depth: 0
 
-    - name: Build tailscale-custom-linux-${{ matrix.arch }}
+    - name: Build tailscale-${{ needs.prepare.outputs.release_name }}-${{ matrix.arch }}
       env:
         ARCH: ${{ matrix.arch }}
         BUILD_TAGS: ${{ needs.prepare.outputs.build_tags }}
-      run: tailscale-custom/scripts/build.sh tailscale "$ARCH" "$BUILD_TAGS" dist
+        NAME: tailscale-${{ needs.prepare.outputs.release_name }}
+      run: tailscale-custom/scripts/build.sh tailscale "$ARCH" "$BUILD_TAGS" "$NAME" dist
 
     - name: Upload binary
       uses: actions/upload-artifact@v7
       with:
-        name: tailscale-custom-linux-${{ matrix.arch }}
-        path: dist/tailscale-custom-linux-${{ matrix.arch }}
+        name: tailscale-${{ needs.prepare.outputs.release_name }}-${{ matrix.arch }}
+        path: dist/tailscale-${{ needs.prepare.outputs.release_name }}-${{ matrix.arch }}
         if-no-files-found: error
         retention-days: 7
 

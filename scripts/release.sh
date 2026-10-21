@@ -19,9 +19,9 @@ name="$1" version="$2"
 cd "$3"
 
 shopt -s nullglob
-binaries=(tailscale-custom-linux-*)
+binaries=("tailscale-$name-"*)
 if [ "${#binaries[@]}" -eq 0 ]; then
-	echo "::error::No tailscale-custom binaries in $3" >&2
+	echo "::error::No tailscale-$name-<arch> binaries in $3" >&2
 	exit 1
 fi
 for f in enabled-features.txt disabled-features.txt; do
@@ -35,7 +35,7 @@ if [ -z "$tag" ]; then
 	echo "Creating release $name with: ${binaries[*]}"
 	notes="Tailscale $version built from the official source with a custom feature set.
 
-Each \`tailscale-custom-linux-<arch>\` binary is tailscaled. If the \`cli\` feature is enabled, it also works as the CLI when invoked as \`tailscale\`: \`ln -s tailscale-custom-linux-<arch> tailscale\`.
+Each \`tailscale-$name-<arch>\` binary is tailscaled. If the \`cli\` feature is enabled, it also works as the CLI when invoked as \`tailscale\`: \`ln -s tailscale-$name-<arch> tailscale\`.
 
 See enabled-features.txt and disabled-features.txt for the feature set."
 	gh release create "$name" --title "$name" --notes "$notes" \
