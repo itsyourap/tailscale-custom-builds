@@ -9,6 +9,8 @@
 #   disabled-features.txt  features compiled out
 #   build-tags.txt         tags for scripts/build.sh
 set -euo pipefail
+# Byte-order sorting, so the lists come out the same in every locale.
+export LC_ALL=C
 
 if [ "$#" -ne 3 ]; then
 	echo "usage: $0 <tailscale-source-dir> <features> <output-dir>" >&2

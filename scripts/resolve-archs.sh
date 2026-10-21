@@ -4,6 +4,8 @@
 #
 # Usage: scripts/resolve-archs.sh <archs>
 set -euo pipefail
+# Byte-order sorting, so the lists come out the same in every locale.
+export LC_ALL=C
 
 if [ "$#" -ne 1 ]; then
 	echo "usage: $0 <archs>" >&2
