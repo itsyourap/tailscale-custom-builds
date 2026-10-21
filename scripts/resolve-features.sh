@@ -8,7 +8,8 @@
 #   enabled-features.txt   features in the binary, including dependencies
 #   disabled-features.txt  features compiled out
 #   build-tags.txt         tags for scripts/build.sh
-#   feature-hash.txt       hash of the enabled features, used in release names
+#   feature-hash-input.txt the text that is hashed: enabled features, comma-joined
+#   feature-hash.txt       hash of that text, used in release names
 set -euo pipefail
 # Byte-order sorting, so the lists come out the same in every locale.
 export LC_ALL=C
@@ -51,9 +52,10 @@ write "$out/enabled-features.txt" "$enabled"
 write "$out/disabled-features.txt" "$disabled"
 write "$out/build-tags.txt" "$tags"
 
-# The enabled features, sorted and joined with commas, hashed with SHA-256 and
-# cut to 12 hex digits.
-hash="$(paste -sd, <<<"$enabled" | tr -d '\n' | sha256sum | cut -c1-12)"
+# The enabled features, sorted and joined with commas (no trailing newline),
+# hashed with SHA-256 and cut to 12 hex digits.
+printf '%s' "$(paste -sd, <<<"$enabled")" >"$out/feature-hash-input.txt"
+hash="$(sha256sum "$out/feature-hash-input.txt" | cut -c1-12)"
 write "$out/feature-hash.txt" "$hash"
 
 echo "Enabled ($(grep -c . <<<"$enabled" || true)): $(paste -sd, <<<"$enabled")"
