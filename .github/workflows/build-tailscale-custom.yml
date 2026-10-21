@@ -92,6 +92,8 @@ jobs:
         path: |
           features/enabled-features.txt
           features/disabled-features.txt
+          features/feature-hash.txt
+          features/feature-hash-input.txt
         if-no-files-found: error
         retention-days: 7
 
