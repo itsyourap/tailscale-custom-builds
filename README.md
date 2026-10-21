@@ -26,15 +26,23 @@ binaries and the feature lists are kept as workflow artifacts for 7 days.
 
 ### Releases
 
-With `release` on, the binaries go to the release named after the version,
-for example `v1.104.2`:
+With `release` on, the binaries go to the release named
+`<version>-<feature hash>`, for example `v1.104.2-bac268ed04d5` for every
+feature of v1.104.2. Each feature set of a version gets its own release.
 
 - If there is no such release, it is created with every binary,
   `enabled-features.txt` and `disabled-features.txt`.
 - If the release exists, only binaries for architectures it doesn't have yet
   are uploaded. If it already has all of them, nothing changes.
-- Appending fails if the release was built with a different feature set. Use
-  the same `features`, or delete the release first.
+
+The feature hash covers the features actually in the binary, including the
+ones added as dependencies, so inputs that produce the same binary share a
+release. The names are sorted in byte order, joined with commas, hashed with
+SHA-256 and cut to 12 hex digits. To check a release's hash:
+
+```sh
+LC_ALL=C sort enabled-features.txt | paste -sd, | tr -d '\n' | sha256sum | cut -c1-12
+```
 
 ## Architectures
 
@@ -84,8 +92,8 @@ docker run --rm -v "$PWD:/work" -w /work -e OWNER="$(id -u):$(id -g)" ubuntu:24.
 The scripts:
 
 - `scripts/resolve-features.sh` validates the feature list, adds
-  dependencies, and writes `enabled-features.txt`, `disabled-features.txt` and
-  `build-tags.txt`.
+  dependencies, and writes `enabled-features.txt`, `disabled-features.txt`,
+  `build-tags.txt` and `feature-hash.txt`.
 - `scripts/build.sh` builds one architecture with Tailscale's Go fork, pinned
   by the source tree's `go.toolchain.rev`, as official releases do.
 - `scripts/resolve-archs.sh` validates the architecture list for the build
