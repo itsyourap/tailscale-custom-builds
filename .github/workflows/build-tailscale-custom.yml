@@ -1,0 +1,156 @@
+name: Build tailscale-custom
+
+on:
+  workflow_dispatch:
+    inputs:
+      features:
+        description: Features to include, comma-separated. Remove the ones you don't need; anything not listed is compiled out.
+        type: string
+        default: ace,acme,advertiseexitnode,advertiseroutes,androidbin,androiddns,appconnectors,aws,bakedroots,bird,c2n,cachenetmap,captiveportal,capture,cli,cliconndiag,clientmetrics,clientupdate,cloud,colorable,completion,completion_scripts,conn25,connreject,dbus,debug,debugeventbus,debugportmapper,desktop_sessions,dns,dnsresolvecache,doctor,drive,favorites,flashappliance,gro,health,hujsonconf,identityfederation,ipnbus,iptables,kube,linkspeed,linuxdnsfight,listenrawdisco,logtail,nattraversal,netlog,netstack,networkmanager,oauthkey,osrouter,outboundproxy,peerapiclient,peerapiserver,portlist,portmapper,posture,qrcodes,relayserver,remoteconfig,resolved,routecheck,runtimemetrics,sdnotify,serve,serviceclientprefs,ssh,synology,syslog,syspolicy,systray,taildrop,tailnetlock,tap,tpm,tundevstats,udptransport,unixsocketidentity,useexitnode,useproxy,usermetrics,useroutes,wakeonlan,webbrowser,webclient
+      arch:
+        description: Linux architectures to build, comma-separated. Remove the ones you don't need.
+        type: string
+        default: 386,amd64,arm,arm64,geode,loong64,mips,mips64,mips64le,mipsle,ppc64le,riscv64,s390x
+      version:
+        description: Tailscale tag to build, e.g. v1.104.2. Leave empty for the latest stable release.
+        type: string
+        default: ""
+      release:
+        description: Publish the binaries to the GitHub release named after the version
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Resolve version, architectures and features
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      archs: ${{ steps.archs.outputs.archs }}
+      build_tags: ${{ steps.features.outputs.build_tags }}
+
+    steps:
+    - name: Checkout tailscale-custom
+      uses: actions/checkout@v7
+      with:
+        path: tailscale-custom
+
+    - name: Resolve tailscale version
+      id: version
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REQUESTED_VERSION: ${{ inputs.version }}
+      run: |
+        version="$(tr -d ' \t' <<<"$REQUESTED_VERSION")"
+        if [ -z "$version" ]; then
+          version="$(gh release view --repo tailscale/tailscale --json tagName --jq .tagName)"
+        fi
+        if ! [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error::Invalid tailscale version '$version' (expected a tag such as v1.104.2)"
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve architectures
+      id: archs
+      env:
+        ARCHS: ${{ inputs.arch }}
+      run: |
+        archs="$(tailscale-custom/scripts/resolve-archs.sh "$ARCHS")"
+        echo "Building: $archs"
+        echo "archs=$archs" >> "$GITHUB_OUTPUT"
+
+    - name: Checkout tailscale repo
+      uses: actions/checkout@v7
+      with:
+        repository: tailscale/tailscale
+        ref: ${{ steps.version.outputs.version }}
+        path: tailscale
+
+    - name: Resolve features
+      id: features
+      env:
+        FEATURES: ${{ inputs.features }}
+      run: |
+        tailscale-custom/scripts/resolve-features.sh tailscale "$FEATURES" features
+        echo "build_tags=$(cat features/build-tags.txt)" >> "$GITHUB_OUTPUT"
+
+    - name: Upload feature lists
+      uses: actions/upload-artifact@v7
+      with:
+        name: features
+        path: |
+          features/enabled-features.txt
+          features/disabled-features.txt
+        if-no-files-found: error
+        retention-days: 7
+
+  build:
+    name: Build ${{ matrix.arch }}
+    needs: prepare
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJSON(needs.prepare.outputs.archs) }}
+
+    steps:
+    - name: Checkout tailscale-custom
+      uses: actions/checkout@v7
+      with:
+        path: tailscale-custom
+
+    - name: Checkout tailscale repo
+      uses: actions/checkout@v7
+      with:
+        repository: tailscale/tailscale
+        ref: ${{ needs.prepare.outputs.version }}
+        path: tailscale
+        fetch-depth: 0
+
+    - name: Build tailscale-custom-linux-${{ matrix.arch }}
+      env:
+        ARCH: ${{ matrix.arch }}
+        BUILD_TAGS: ${{ needs.prepare.outputs.build_tags }}
+      run: tailscale-custom/scripts/build.sh tailscale "$ARCH" "$BUILD_TAGS" dist
+
+    - name: Upload binary
+      uses: actions/upload-artifact@v7
+      with:
+        name: tailscale-custom-linux-${{ matrix.arch }}
+        path: dist/tailscale-custom-linux-${{ matrix.arch }}
+        if-no-files-found: error
+        retention-days: 7
+
+  release:
+    name: Publish release
+    if: inputs.release
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ needs.prepare.outputs.version }}
+      cancel-in-progress: false
+
+    steps:
+    - name: Checkout tailscale-custom
+      uses: actions/checkout@v7
+      with:
+        path: tailscale-custom
+
+    - name: Download binaries and feature lists
+      uses: actions/download-artifact@v8
+      with:
+        path: dist
+        merge-multiple: true
+
+    - name: Create or update release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        VERSION: ${{ needs.prepare.outputs.version }}
+      run: tailscale-custom/scripts/release.sh "$VERSION" dist
